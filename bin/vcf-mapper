@@ -100,7 +100,6 @@ vcfrecords = []
 					vcfrecord = translated unless translated.nil?
 				end
 			end
-			# pp vcfrecord.to_s
 			fout.print vcfrecord.to_vcf
 		elsif opts[:action] == "rank" || opts[:action] == "r" || opts[:action] == "rank_r" || opts[:action] == "rr" then
 			if line[0] == "#" then
