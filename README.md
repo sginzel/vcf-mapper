@@ -1,4 +1,4 @@
-#vcf-mapper
+# vcf-mapper
 
 ## Installation
 ### From source to gemfile
