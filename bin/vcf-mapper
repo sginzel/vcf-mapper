@@ -1,0 +1,120 @@
+#!/usr/bin/env ruby
+
+# INIT #
+require "trollop"
+require "pp"
+require "set"
+# require "ruby-prof"
+
+require "vcf_mapper"
+
+include VcfMapper::Profiler
+
+STDERR.puts $0  + " " + ARGV.join(" ") if ARGV.delete("--debug")
+
+no_args = ARGV.empty?
+opts = Trollop::options do
+	# genomic information and bam configuration
+	opt :action, "Action to perform (map, translate, rank)", :type => :string, :long => "command", :short => "a"
+	opt :from, "From attribute", :type => :string, :long => "from", :short => "f"
+	opt :to, "To attribute", :type => :string, :long => "to", :short => "t"
+	opt :fun, "Chain of functions to apply to translated attributes (add|substract|multiply|divide|round|ceil|rank|rank_r|log|log2|log10|phred|from_phred|cat|gsub|external|tof|toi|tos)", :type => :string, :long => "chain", :short => "c"
+	opt :params, "Parameter for translate and grep. Each function required a parameter", :type => :string, :long => "parameter", :short => "p"
+	#opt :map_from, "Attribute to map from", :type => :string, :long => "mf", :short => "f"
+	#opt :map_to, "Attribute to map to", :type => :string, :long => "mt", :short => "t"
+	#opt :translate_from, "Attribute to transform", :type => :string, :long => "tf", short: "e"
+	#opt :translate_to, "Attribute to transform", :type => :string, :long => "tt", short: "s"
+	#opt :translate_parameters, "Attribute to transform", :type => :string, :long => "tp", short: "p"
+	#opt :grep, "Filter variants by conditions", :type => :string, :short => "-g"
+	opt :in, "Input VCF", :type => :string, :short => "-i"
+	opt :out, "Output VCF", :type => :string, :short => "-o"
+	
+end
+
+Signal.trap("SIGINT") do 
+		while !(user_input == "Y" or user_input == "n")
+			STDOUT.puts "Ctrl+C detected. Do you want to abort processing? [Yn]"
+			user_input = STDIN.read(1).strip
+		end
+		if user_input == "Y"
+			exit 1
+		end 
+end
+
+raise Trollop::educate if no_args
+
+if !opts[:man].nil? then
+	if opts[:man] == "map" then
+		
+	elsif opts[:man] == "translate" then
+		
+	else
+		puts "Command not recognized"
+		exit 1
+	end
+end
+
+# Trollop::die :ref, "Please give coordinates and use CHR:FROM-TO format" unless !(opts[:coord].nil?) and opts[:coord] =~ /^[chrCHR]*[0-9XYM]+:[0-9,]+-[0-9,]+$/
+# Trollop::die :bam, "must exist" unless !(opts[:bam].nil?) and opts[:bam].all?{|bam|
+#	bam = Dir[bam].select{|fname| fname =~ /.*\.bam$/}
+#	bam.each do |bamfile|
+#		File.exist?(bamfile)
+#	end
+#}
+#Trollop::die :ref, "must exist" unless !(opts[:ref].nil?) and File.exist?(opts[:ref])
+
+if opts[:in].nil? then
+	fin = STDIN
+else
+	fin = File.new(opts[:in], "r")
+end
+
+if opts[:out].nil? then
+	fout = STDOUT
+else
+	fout = File.new(opts[:out], "w+")
+end
+
+vcf = VcfMapper::Vcf.new({strict: false})
+
+mystart = Time.now
+cnt = 0
+ranked = SortedSet.new()
+vcfrecords = []
+# VcfMapper::Profiler.profile("parse_line") do
+	fin.each_line do |line|
+		# STDERR.print "#{cnt}\r" if cnt % 1000 == 0
+		vcfrecord = vcf.parse line
+		if opts[:action] == "map" || opts[:action] == "m" || opts[:action] == "translate" || opts[:action] == "t" || opts[:action] == "transform" then
+			if opts[:action] == "map" || opts[:action] == "m" then
+				mapped_vcfrecord = vcf.map(vcfrecord, opts[:from], opts[:to])
+				if vcfrecord.is_a?(VcfMapper::VcfMetaRecord) then
+					if mapped_vcfrecord.object_id != vcfrecord.object_id
+						fout.print vcfrecord.to_vcf # need to add an additional meta record
+					end
+				end
+				vcfrecord = mapped_vcfrecord
+			elsif opts[:action] == "translate" || opts[:action] == "t" || opts[:action] == "transform"
+				if vcfrecord.is_a?(VcfMapper::VcfDataRecord) then
+					translated = vcf.translate(vcfrecord, opts[:from], opts[:fun], opts[:params])
+					vcfrecord = translated unless translated.nil?
+				end
+			end
+			# pp vcfrecord.to_s
+			fout.print vcfrecord.to_vcf
+		elsif opts[:action] == "rank" || opts[:action] == "r" || opts[:action] == "rank_r" || opts[:action] == "rr" then
+			if line[0] == "#" then
+				fout.print vcfrecord.to_vcf
+			else
+				raise "Ranking not implemented."
+				vcfrecords << vcfrecord
+				ranked << vcfrecord.get(opts[:from])
+			end
+		else
+			raise "Action not found."
+		end
+		cnt += 1
+	end
+# end
+# STDERR.print "#{cnt}\n" 
+# STDERR.puts "Parsing took: #{Time.now-mystart}"
